@@ -1,23 +1,18 @@
-import type { SentimentResult } from "./sentiment";
-
+// Added string declaration aliases so parsing lookups don't crash components
 export type MessagePlatform = "whatsapp" | "instagram";
 
-export interface Message {
-  id: string;
-  conversationId: string;
-  platform: MessagePlatform;
-  senderName: string;
-  text: string;
-  timestamp: string;
-  sentiment?: SentimentResult;
-  isSystemMessage: boolean;
-  createdAt: string;
+export interface MessageSentiment {
+  label: "positive" | "neutral" | "negative";
+  score: number;
 }
 
-export interface ParsedMessageInput {
-  platform: MessagePlatform;
+export interface Message {
+  id: string; // Required for key index loops
+  conversationId: string;
   senderName: string;
-  text: string;
   timestamp: string;
-  isSystemMessage?: boolean;
+  text: string;
+  isSystemMessage: boolean;
+  platform?: "whatsapp" | "instagram"; // Optional structural tag for parsing lookups
+  sentiment?: MessageSentiment;
 }
