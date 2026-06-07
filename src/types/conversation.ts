@@ -1,19 +1,18 @@
-import type { MessagePlatform } from "./message";
-import type { SentimentSummary } from "./sentiment";
-
 export interface Conversation {
-  id: string;
-  platform: MessagePlatform;
+  id: string; // Made strictly required to fix TS2345 & Dexie index queries
   title: string;
+  platform: "whatsapp" | "instagram";
   participantNames: string[];
   messageCount: number;
   firstMessageAt?: string;
   lastMessageAt?: string;
-  sentimentSummary?: SentimentSummary;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface ConversationPreview extends Conversation {
-  latestMessageText?: string;
+  createdAt?: string; // Standardized for historical sorting
+  updatedAt?: string;
+  sentimentSummary?: {
+    dominantSentiment: "positive" | "neutral" | "negative" | "unknown";
+    averageScore: number;
+    positiveCount: number; // Restored for structural dashboards
+    neutralCount: number;
+    negativeCount: number;
+  };
 }

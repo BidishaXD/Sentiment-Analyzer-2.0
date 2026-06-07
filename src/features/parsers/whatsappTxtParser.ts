@@ -1,215 +1,111 @@
 import type { Conversation } from "../../types/conversation";
 import type { Message } from "../../types/message";
+import { analyzeMessages } from "../sentiment/ruleBasedSentiment";
+import { aggregateSentiment } from "../sentiment/aggregateSentiment";
+import type { ParserResult } from "./types";
 
-export interface WhatsAppParseResult {
-  conversation: Conversation;
-  messages: Message[];
-  skippedLines: string[];
-}
-
-interface WhatsAppLineMatch {
-  timestamp: string;
-  body: string;
-}
-
-const PLATFORM = "whatsapp" as const;
-
-export function parseWhatsAppTxt(
-  fileText: string,
-  conversationTitle = "WhatsApp Conversation",
-): WhatsAppParseResult {
-  const lines = fileText
-    .replace(/\r\n/g, "\n")
-    .replace(/\r/g, "\n")
-    .split("\n");
-
-  const conversationId = createStableId(`${PLATFORM}:${conversationTitle}`);
-  const now = new Date().toISOString();
-
-  const messages: Message[] = [];
+export async function parseWhatsAppTxt(
+  text: string,
+  conversationTitle: string
+): Promise<ParserResult> {
+  const lines = text.split(/\r?\n/);
+  const rawMessages: Omit<Message, "id">[] = [];
   const skippedLines: string[] = [];
-  const participants = new Set<string>();
+  const participantNamesSet = new Set<string>();
 
-  let currentMessage: Message | null = null;
+  // 1. Matches bracket formats: "[6/1/2026, 10:00:00 AM] Name: text"
+  const bracketRegex = /^\[(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}),\s*(\d{1,2}:\d{2}(?::\d{2})?.*?)[\]?]\s*([^:]+):\s(.*)$/;
+  
+  // 2. UPDATED: Matches your exact format: "6/1/2026, 10:00 AM - John: This is great"
+  const hyphenRegex = /^(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}),\s*(\d{1,2}:\d{2}(?::\d{2})?\s*[A-Z]{2})\s*-\s*([^:]+):\s(.*)$/i;
 
-  for (const rawLine of lines) {
-    const line = rawLine.trimEnd();
+  const conversationId = `wa-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
 
-    if (!line.trim()) {
-      continue;
+  for (const line of lines) {
+    if (!line.trim()) continue;
+
+    let match = line.match(bracketRegex);
+    let rawDate = "";
+    let rawTime = "";
+    let senderName = "";
+    let messageText = "";
+
+    if (match) {
+      [, rawDate, rawTime, senderName, messageText] = match;
+    } else {
+      match = line.match(hyphenRegex);
+      if (match) {
+        [, rawDate, rawTime, senderName, messageText] = match;
+      }
     }
 
-    const parsedLine = parseWhatsAppLine(line);
+    if (match) {
+      const cleanSender = senderName.trim();
+      participantNamesSet.add(cleanSender);
 
-    if (!parsedLine) {
-      if (currentMessage) {
-        currentMessage.text = `${currentMessage.text}\n${line}`;
+      let ISOString = new Date().toISOString();
+      try {
+        // Clean up text format anomalies before passing to Date constructor
+        const cleanDateStr = rawDate.trim();
+        const cleanTimeStr = rawTime.trim().replace(/\s+/g, " ");
+        const parsedDate = new Date(`${cleanDateStr} ${cleanTimeStr}`);
+        
+        if (!isNaN(parsedDate.getTime())) {
+          ISOString = parsedDate.toISOString();
+        }
+      } catch {
+        // Fallback silently to current execution timestamp
+      }
+
+      rawMessages.push({
+        conversationId,
+        senderName: cleanSender,
+        timestamp: ISOString,
+        text: messageText.trim(),
+        isSystemMessage: false,
+      });
+    } else {
+      // Handle multiline continuation or log metadata splits
+      if (rawMessages.length > 0 && !line.includes("Messages and calls are end-to-end encrypted")) {
+        rawMessages[rawMessages.length - 1].text += `\n${line.trim()}`;
       } else {
         skippedLines.push(line);
       }
-
-      continue;
     }
-
-    if (currentMessage) {
-      messages.push(currentMessage);
-    }
-
-    const { senderName, text, isSystemMessage } = parseMessageBody(
-      parsedLine.body,
-    );
-
-    if (!isSystemMessage) {
-      participants.add(senderName);
-    }
-
-    const timestamp = parseWhatsAppTimestamp(parsedLine.timestamp);
-    const messageSeed = `${conversationId}:${parsedLine.timestamp}:${senderName}:${text}`;
-
-    currentMessage = {
-      id: createStableId(messageSeed),
-      conversationId,
-      platform: PLATFORM,
-      senderName,
-      text,
-      timestamp,
-      isSystemMessage,
-      createdAt: now,
-    };
   }
 
-  if (currentMessage) {
-    messages.push(currentMessage);
-  }
+  const baseMessages: Message[] = rawMessages.map((msg, index) => ({
+    ...msg,
+    id: `${conversationId}-msg-${index}`,
+  }));
+
+  const analyzedMessages = await analyzeMessages(baseMessages);
+  const summaryMetrics = aggregateSentiment(analyzedMessages);
+
+  const nowString = new Date().toISOString();
+  const participantNames = Array.from(participantNamesSet);
 
   const conversation: Conversation = {
     id: conversationId,
-    platform: PLATFORM,
     title: conversationTitle,
-    participantNames: Array.from(participants).sort(),
-    messageCount: messages.length,
-    firstMessageAt: messages[0]?.timestamp,
-    lastMessageAt: messages[messages.length - 1]?.timestamp,
-    createdAt: now,
-    updatedAt: now,
+    platform: "whatsapp",
+    participantNames,
+    messageCount: analyzedMessages.length,
+    firstMessageAt: analyzedMessages[0]?.timestamp,
+    lastMessageAt: analyzedMessages[analyzedMessages.length - 1]?.timestamp,
+    updatedAt: nowString,
+    sentimentSummary: {
+      dominantSentiment: summaryMetrics.dominantSentiment,
+      averageScore: summaryMetrics.averageScore,
+      positiveCount: summaryMetrics.positiveCount,
+      neutralCount: summaryMetrics.neutralCount,
+      negativeCount: summaryMetrics.negativeCount,
+    },
   };
 
   return {
     conversation,
-    messages,
+    messages: analyzedMessages,
     skippedLines,
   };
-}
-
-function parseWhatsAppLine(line: string): WhatsAppLineMatch | null {
-  const androidMatch = line.match(
-    /^(\d{1,2}\/\d{1,2}\/\d{2,4},\s*\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM|am|pm)?)\s-\s(.+)$/,
-  );
-
-  if (androidMatch) {
-    return {
-      timestamp: androidMatch[1],
-      body: androidMatch[2],
-    };
-  }
-
-  const iosMatch = line.match(
-    /^\[(\d{1,2}\/\d{1,2}\/\d{2,4},\s*\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM|am|pm)?)\]\s(.+)$/,
-  );
-
-  if (iosMatch) {
-    return {
-      timestamp: iosMatch[1],
-      body: iosMatch[2],
-    };
-  }
-
-  return null;
-}
-
-function parseMessageBody(body: string): {
-  senderName: string;
-  text: string;
-  isSystemMessage: boolean;
-} {
-  const senderMatch = body.match(/^([^:]+):\s([\s\S]*)$/);
-
-  if (!senderMatch) {
-    return {
-      senderName: "System",
-      text: body.trim(),
-      isSystemMessage: true,
-    };
-  }
-
-  return {
-    senderName: senderMatch[1].trim(),
-    text: senderMatch[2].trim(),
-    isSystemMessage: false,
-  };
-}
-
-function parseWhatsAppTimestamp(timestamp: string): string {
-  const cleaned = timestamp
-    .replace(/\u202f/g, " ")
-    .replace(/\u00a0/g, " ")
-    .trim();
-
-  const match = cleaned.match(
-    /^(\d{1,2})\/(\d{1,2})\/(\d{2,4}),\s*(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM|am|pm)?$/,
-  );
-
-  if (!match) {
-    return new Date().toISOString();
-  }
-
-  const first = Number(match[1]);
-  const second = Number(match[2]);
-  const yearRaw = Number(match[3]);
-  let hour = Number(match[4]);
-  const minute = Number(match[5]);
-  const secondValue = Number(match[6] ?? 0);
-  const meridiem = match[7]?.toLowerCase();
-
-  const year = yearRaw < 100 ? 2000 + yearRaw : yearRaw;
-
-  if (meridiem === "pm" && hour < 12) {
-    hour += 12;
-  }
-
-  if (meridiem === "am" && hour === 12) {
-    hour = 0;
-  }
-
-  const { day, month } = inferDayAndMonth(first, second);
-  const date = new Date(year, month - 1, day, hour, minute, secondValue);
-
-  return Number.isNaN(date.getTime())
-    ? new Date().toISOString()
-    : date.toISOString();
-}
-
-function inferDayAndMonth(
-  first: number,
-  second: number,
-): { day: number; month: number } {
-  if (first > 12) {
-    return { day: first, month: second };
-  }
-
-  if (second > 12) {
-    return { day: second, month: first };
-  }
-
-  return { day: first, month: second };
-}
-
-function createStableId(value: string): string {
-  let hash = 5381;
-
-  for (let index = 0; index < value.length; index += 1) {
-    hash = (hash * 33) ^ value.charCodeAt(index);
-  }
-
-  return Math.abs(hash >>> 0).toString(36);
 }
