@@ -1,73 +1,114 @@
-# React + TypeScript + Vite
+# Sentiment Analyzer 2.0 📊
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A high-performance, local-first sentiment analysis dashboard designed to parse, normalize, and evaluate chat histories exported from platforms like WhatsApp and Instagram. Built with privacy-by-design principles, the application executes all data ingestion, regex parsing, and rule-based token tracking completely inside the browser sandbox using multithreaded Web Workers and fast local persistence.
 
-Currently, two official plugins are available:
+---
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## 🚀 Features
 
-## React Compiler
+- **Multi-Platform Ingestion Engine:** Dynamically switches parsing pipelines to process raw WhatsApp text exports (`.txt`) and compressed Instagram data archives (`.zip`/`.json`).
+- **Multithreaded Text Processing:** Offloads intensive rule-based lexicon token-matching to a dedicated background Web Worker (`sentiment.worker.ts`), keeping the UI rendering thread completely smooth at 60 FPS.
+- **Privacy-by-Design Blueprint:** Zero external server dependencies or API calls. Features PII redactors (email, phone numbers), deterministic cryptographic channel hashing (SHA-256), and user-defined local data retention policies.
+- **Reactive Local Persistence:** Implements transactional local storage via Dexie.js (IndexedDB) with real-time live queries to sync application states instantly.
+- **Granular Dashboard Analytics:** Provides chronological conversational timelines, dominant emotional trend tracking, per-participant breakdown matrices, and metric export utilities.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+---
 
-## Expanding the ESLint configuration
+## 🛠️ Tech Stack
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+- **Frontend Core:** React, TypeScript, Vite
+- **Styling:** Tailwind CSS (v3 with custom view-state utilities)
+- **Local Database:** Dexie.js (IndexedDB wrapper)
+- **Decompression:** fflate (high-speed binary zip parsing)
+- **Testing Framework:** Vitest / Jest layout configurations
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+---
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+## 📂 Architecture Blueprint
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+The project follows a highly modular, decoupled layer structure:
+
+```text
+Sentiment-Analyzer-2.0/
+├── src/
+│   ├── types/               # Strict schema contracts (Message, Conversation, Report)
+│   ├── storage/             # IndexedDB connections, repositories, and transaction loops
+│   ├── features/
+│   │   ├── import/          # WhatsApp regex line-splitters and Instagram ZIP extractions
+│   │   ├── normalization/   # PII filters, timestamp ISO mapping, and system log purgers
+│   │   ├── privacy/         # SHA-256 obfuscation, user consent trackers, and retention sweeps
+│   │   └── sentiment/       # Token weights dictionaries, negation logic, and aggregators
+│   ├── workers/             # Background Web Worker execution threads
+│   ├── components/          # Reusable UI dashboard, summary, and settings components
+│   └── routes/              # High-level layouts, dashboard channels, and timeline configurations
+└── tests/
+    ├── fixtures/            # Mock export samples (whatsapp-export.txt, instagram-messages.json)
+    └── unit/                # Isolated validation assertions for parsers and sentiment calculations
+
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+---
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## ⚙️ Getting Started
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+### Prerequisites
+
+Ensure you have **Node.js** (v18 or higher) and **npm** installed on your machine.
+
+### Installation
+
+1. Clone the repository:
+```bash
+git clone [https://github.com/ShourjyoXD/Sentiment-Analyzer-2.0.git](https://github.com/ShourjyoXD/Sentiment-Analyzer-2.0.git)
+cd Sentiment-Analyzer-2.0
+
+```
+
+
+2. Install dependencies:
+```bash
+npm install
+
+```
+
+
+
+### Development
+
+Launch the local Vite development server:
+
+```bash
+npm run dev
+
+```
+
+Open [http://localhost:5173](https://www.google.com/search?q=http://localhost:5173) in your browser.
+
+### Production Build
+
+Compile and optimize the complete type-safe application bundle:
+
+```bash
+npm run build
+
+```
+
+The production-ready bundle will be emitted to the `dist/` directory, validating all assets, styles, and background workers with zero errors.
+
+---
+
+## 🛡️ Privacy & Compliance Specifications
+
+* **Data Isolation:** Uploaded backups are processed locally in an ephemeral stream. Raw string cleartext can be permanently omitted based on user storage preferences.
+* **Deterministic Masking:** Primary keys are generated using browser-native WebCrypto SHA-256 hashing to hide structural channel titles on disk.
+* **Retention Cascades:** Automated data retention sweeps execute on application boot, cleanly purging expired indexed conversations and cascade-deleting dependent message tables.
+
+---
+
+## 📄 License
+
+This project is open-source and available under the [MIT License](https://www.google.com/search?q=LICENSE).
+
+```
+
 ```
